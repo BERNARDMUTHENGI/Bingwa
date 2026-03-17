@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:provider/provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:bingwa_hybrid/core/themes/app_theme.dart';
 import 'package:bingwa_hybrid/core/widgets/app_drawer.dart';
-// If you added fl_chart, uncomment the next line:
-// import 'package:fl_chart/fl_chart.dart';
+import 'package:bingwa_hybrid/features/auth/providers/auth_provider.dart';
+import 'package:bingwa_hybrid/features/balance/providers/balance_provider.dart';
+import 'package:bingwa_hybrid/features/offers/providers/offer_provider.dart'; // new import
+import 'package:bingwa_hybrid/features/sms_listener/services/sms_listener_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -12,54 +17,137 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  // For tabs: 0 = Successful, 1 = Failed, 2 = Expired Tokens
   int _selectedTabIndex = 0;
-
-  // Dummy data for chart (replace later with real API data)
   final List<double> _weeklyCommission = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
   final List<String> _weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  SmsListenerService? _smsListener;
+
+  @override
+  void initState() {
+    super.initState();
+    debugPrint('🏠 Dashboard: initState');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      debugPrint('🏠 Dashboard: Post-frame callback');
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      if (authProvider.currentUser == null) {
+        debugPrint('🏠 Dashboard: Fetching user profile');
+        authProvider.fetchUserProfile();
+      } else {
+        debugPrint('🏠 Dashboard: User already loaded');
+      }
+      _initSmsListener();
+    });
+  }
+
+  Future<void> _initSmsListener() async {
+    // Ensure offers are loaded before starting the listener
+    final offerProvider = Provider.of<OfferProvider>(context, listen: false);
+    if (offerProvider.offers.isEmpty) {
+      debugPrint('🏠 Dashboard: Offers not loaded, syncing now...');
+      await offerProvider.syncOffers();
+      debugPrint('🏠 Dashboard: Offers synced, count: ${offerProvider.offers.length}');
+    } else {
+      debugPrint('🏠 Dashboard: Offers already loaded, count: ${offerProvider.offers.length}');
+    }
+
+    _smsListener = SmsListenerService(context);
+    final granted = await _smsListener!.requestPermissions();
+    if (granted) {
+      debugPrint('🏠 Dashboard: Permissions granted, starting listener');
+      _smsListener!.startListening();
+    } else {
+      debugPrint('🏠 Dashboard: Permissions denied');
+      _showPermissionDialog();
+    }
+  }
+
+  @override
+  void dispose() {
+    debugPrint('🏠 Dashboard: Disposing, stopping SMS listener');
+    _smsListener?.dispose();
+    super.dispose();
+  }
+
+  void _showPermissionDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('SMS Permission Required'),
+        content: const Text(
+          'To automatically detect M-PESA payments, please grant SMS permission in settings.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              debugPrint('🏠 Dashboard: Opening app settings');
+              Navigator.pop(ctx);
+              await openAppSettings();
+            },
+            child: const Text('Open Settings'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good Morning';
+    if (hour < 17) return 'Good Afternoon';
+    return 'Good Evening';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context);
+    final balanceProvider = Provider.of<BalanceProvider>(context);
+    final userName = authProvider.currentUser?.fullName.split(' ').first ?? 'User';
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Good Evening, Bernard',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+        title: Text(
+          '${_getGreeting()}, $userName',
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
         ),
         actions: [
-          // Optional: notification icon or profile avatar
           IconButton(
             icon: const Icon(Icons.notifications_outlined),
             onPressed: () {},
           ),
         ],
       ),
-       drawer: const AppDrawer(),   // <-- Add this line
+      drawer: const AppDrawer(),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Tabs
             _buildTabs(),
             const SizedBox(height: 24),
-
-            // Stats Cards Row
             Row(
               children: [
-                Expanded(child: _buildStatCard('Airtime Used Today', 'Ksh 0.00')),
+                Expanded(
+                  child: _buildStatCard(
+                    'Airtime Used Today',
+                    'Ksh ${balanceProvider.airtimeUsedToday.toStringAsFixed(2)}',
+                  ),
+                ),
                 const SizedBox(width: 16),
-                Expanded(child: _buildStatCard('Airtime Balance', 'Ksh 0.00')),
+                Expanded(
+                  child: _buildStatCard(
+                    'Airtime Balance',
+                    'Ksh ${balanceProvider.airtimeBalance.toStringAsFixed(2)}',
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 24),
-
-            // Chart Section
             _buildChartSection(),
             const SizedBox(height: 24),
-
-            // Recent Transactions
             _buildRecentTransactions(),
           ],
         ),
@@ -67,7 +155,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // Custom tab bar
   Widget _buildTabs() {
     return Container(
       decoration: BoxDecoration(
@@ -92,7 +179,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           setState(() {
             _selectedTabIndex = index;
           });
-          // TODO: Fetch data for selected tab
         },
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
@@ -113,7 +199,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // Stat card widget
   Widget _buildStatCard(String title, String value) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -134,25 +219,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           Text(
             title,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.grey,
-            ),
+            style: const TextStyle(fontSize: 14, color: Colors.grey),
           ),
           const SizedBox(height: 8),
           Text(
             value,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
         ],
       ),
     );
   }
 
-  // Chart section
   Widget _buildChartSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -167,93 +245,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
           style: TextStyle(fontSize: 14, color: Colors.grey[600]),
         ),
         const SizedBox(height: 16),
-
-        // Option 1: Simple bar chart using Containers (no package)
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: List.generate(7, (index) {
             return Column(
               children: [
                 Container(
-                  height: 80, // Fixed height for bars
+                  height: 80,
                   width: 20,
                   decoration: BoxDecoration(
                     color: AppTheme.primaryBlue.withOpacity(0.3),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      // This would show actual bar height based on value
-                      // For now, all zeros so nothing
-                    ],
-                  ),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  _weekDays[index],
-                  style: const TextStyle(fontSize: 12),
-                ),
+                Text(_weekDays[index], style: const TextStyle(fontSize: 12)),
               ],
             );
           }),
         ),
-
-        // Option 2: If you want to use fl_chart, replace the above Row with:
-        /*
-        SizedBox(
-          height: 200,
-          child: BarChart(
-            BarChartData(
-              alignment: BarChartAlignment.spaceAround,
-              maxY: 100, // Adjust based on your data
-              barGroups: List.generate(7, (index) {
-                return BarChartGroupData(
-                  x: index,
-                  barRods: [
-                    BarChartRodData(
-                      toY: _weeklyCommission[index],
-                      color: AppTheme.primaryBlue,
-                      width: 20,
-                    ),
-                  ],
-                );
-              }),
-              titlesData: FlTitlesData(
-                show: true,
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    getTitlesWidget: (value, meta) {
-                      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                      if (value.toInt() >= 0 && value.toInt() < days.length) {
-                        return Text(days[value.toInt()]);
-                      }
-                      return const Text('');
-                    },
-                  ),
-                ),
-                leftTitles: const AxisTitles(
-                  sideTitles: SideTitles(showTitles: false),
-                ),
-                topTitles: const AxisTitles(
-                  sideTitles: SideTitles(showTitles: false),
-                ),
-                rightTitles: const AxisTitles(
-                  sideTitles: SideTitles(showTitles: false),
-                ),
-              ),
-              gridData: const FlGridData(show: false),
-              borderData: FlBorderData(show: false),
-            ),
-          ),
-        ),
-        */
       ],
     );
   }
 
-  // Recent transactions section
   Widget _buildRecentTransactions() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

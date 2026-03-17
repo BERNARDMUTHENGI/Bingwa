@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:bingwa_hybrid/core/themes/app_theme.dart';
 import 'package:bingwa_hybrid/core/widgets/app_drawer.dart';
 
 class CheckUpdatesScreen extends StatelessWidget {

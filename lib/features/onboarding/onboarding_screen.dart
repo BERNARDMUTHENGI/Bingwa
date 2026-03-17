@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:bingwa_hybrid/core/themes/app_theme.dart';
-import 'package:bingwa_hybrid/features/auth/registration_screen.dart';
+import 'package:bingwa_hybrid/features/auth/screens/registration_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -18,13 +18,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       title: 'Sell your Bundles, airtime and minutes easily',
       description:
           'Focus on marketing and worry less about the process of delivery',
-      image: 'assets/onboarding1.svg', // You'll need to add assets
+      image: 'assets/bingwa ultra.jpeg', // using the same logo for both pages
     ),
     OnboardingPage(
       title: 'Setting up instructions',
       description:
           'Ensure you have your Bingwa SIM Card to process customer requests and the till SIM Card to receive payments',
-      image: 'assets/onboarding2.svg',
+      image: 'assets/bingwa ultra.jpeg',
     ),
   ];
 
@@ -42,21 +42,28 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               });
             },
             itemBuilder: (context, index) {
+              final page = _pages[index];
               return Padding(
                 padding: const EdgeInsets.all(24.0),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Placeholder for illustration
+                    // Logo image
                     Container(
                       height: 200,
                       width: 200,
-                      color: Colors.grey[300],
-                      child: const Center(child: Text('Illustration')),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.grey[200],
+                        image: DecorationImage(
+                          image: AssetImage(page.image),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 40),
                     Text(
-                      _pages[index].title,
+                      page.title,
                       style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
@@ -65,7 +72,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      _pages[index].description,
+                      page.description,
                       style: const TextStyle(
                         fontSize: 16,
                         color: Colors.grey,
@@ -86,11 +93,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               children: [
                 TextButton(
                   onPressed: () {
-                    // Skip to registration
-                   Navigator.pushReplacement(
-  context,
-  MaterialPageRoute(builder: (context) => const RegistrationScreen()),
-);
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (context) => const RegistrationScreen()),
+                    );
                   },
                   child: const Text('Skip'),
                 ),
@@ -113,11 +119,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 TextButton(
                   onPressed: () {
                     if (_currentPage == _pages.length - 1) {
-                      // Go to registration
-                     Navigator.pushReplacement(
-  context,
-  MaterialPageRoute(builder: (context) => const RegistrationScreen()),
-);
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(builder: (context) => const RegistrationScreen()),
+                      );
                     } else {
                       _pageController.nextPage(
                         duration: const Duration(milliseconds: 300),
@@ -125,7 +130,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       );
                     }
                   },
-                  child: Text(_currentPage == _pages.length - 1 ? 'Next' : 'Next'),
+                  child: Text(_currentPage == _pages.length - 1 ? 'Get Started' : 'Next'),
                 ),
               ],
             ),
